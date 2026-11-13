@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ultra HDR Converter</title>
+<meta name="description" content="Bulk-convert photos to Ultra HDR JPEGs with a gain map. Runs entirely in your browser.">
+<meta name="theme-color" content="#111214">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23111214'/%3E%3Ccircle cx='16' cy='16' r='7' fill='%23ff7a2e'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #f6f6f4; --surface: #ffffff; --text: #17181a; --muted: #6b6e74; --line: #e3e3df;
+    --accent: #e8590c; --accent-text: #ffffff; --ok: #2b8a3e; --warn: #b35c00; --err: #c92a2a;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #111214; --surface: #1a1b1e; --text: #ececea; --muted: #9a9ca2; --line: #2b2d31;
+      --accent: #ff7a2e; --accent-text: #111214; --ok: #69db7c; --warn: #ffb347; --err: #ff8787;
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 760px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 28px; margin: 0 0 4px; letter-spacing: -0.02em; }
+  .lead { color: var(--muted); margin: 0 0 24px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px; margin-bottom: 16px; }
+  #drop {
+    border: 2px dashed var(--line); border-radius: 14px; padding: 36px 16px; text-align: center;
+    cursor: pointer; background: var(--surface); transition: border-color .15s, background .15s; margin-bottom: 16px;
+  }
+  #drop:hover, #drop:focus-visible, #drop.over { border-color: var(--accent); outline: none; }
+  #drop strong { display: block; font-size: 17px; margin-bottom: 4px; }
+  #drop span { color: var(--muted); font-size: 14px; }
+  .row { display: grid; grid-template-columns: 1fr; gap: 6px; margin-bottom: 14px; }
+  .row label { display: flex; justify-content: space-between; font-weight: 600; font-size: 14px; }
+  .row output { font-weight: 400; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .row small { color: var(--muted); }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  .check { display: flex; gap: 8px; align-items: center; font-size: 14px; }
+  .check input { accent-color: var(--accent); width: 18px; height: 18px; }
+  .curve { margin: 4px 0 14px; }
+  .curve svg { display: block; width: 100%; height: 120px; border-radius: 8px; background: var(--bg); }
+  .curve figcaption { display: grid; grid-template-columns: repeat(3, 1fr); text-align: center; font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .curve .third { stroke: var(--line); stroke-width: 1; vector-effect: non-scaling-stroke; }
+  .curve .line { fill: none; stroke: var(--accent); stroke-width: 2.5; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+  .curve .area { fill: var(--accent); opacity: .15; }
+  .curve text { fill: var(--muted); font-size: 10px; }
+  .advanced { margin-top: 14px; font-size: 14px; }
+  .advanced summary { cursor: pointer; color: var(--muted); font-weight: 600; }
+  .advanced .row { margin: 10px 0 0; }
+  select { font: inherit; padding: 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--text); width: 100%; }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0 8px; }
+  .btn {
+    appearance: none; border: 1px solid var(--line); background: var(--surface); color: var(--text);
+    padding: 10px 16px; border-radius: 10px; font: inherit; font-weight: 600; cursor: pointer; text-decoration: none;
+  }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+  .btn:disabled { opacity: .45; cursor: default; }
+  .btn.small { padding: 6px 12px; font-size: 13px; }
+  #summary { color: var(--muted); font-size: 14px; min-height: 1.5em; }
+  #list { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 8px; }
+  .item { display: grid; grid-template-columns: 64px 1fr auto; gap: 12px; align-items: center;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 8px; }
+  .item img { width: 64px; height: 64px; object-fit: cover; border-radius: 8px; background: var(--line); }
+  .item .meta { min-width: 0; }
+  .item .name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .item .status { font-size: 13px; color: var(--muted); }
+  .item[data-status=done] .status { color: var(--ok); }
+  .item[data-status=skipped] .status { color: var(--warn); }
+  .item[data-status=error] .status { color: var(--err); }
+  .item[data-status=working] .status::after { content: ""; display: inline-block; width: 10px; height: 10px; margin-left: 6px;
+    border: 2px solid var(--muted); border-top-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -1px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #hdr-note { font-size: 13px; color: var(--muted); }
+  #hdr-note[data-hdr=true] { color: var(--ok); }
+  footer { color: var(--muted); font-size: 13px; margin-top: 32px; }
+  footer p { margin: 6px 0; }
+  body:not(.has-items) .results { display: none; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Ultra HDR Converter</h1>
+  <p class="lead">Turn ordinary JPEGs into Ultra HDR photos that glow on HDR phones and screens, in bulk. Everything happens on your device. Nothing is uploaded.</p>
+
+  <div id="drop" tabindex="0" role="button" aria-label="Choose photos">
+    <strong>Drop photos here or tap to choose</strong>
+    <span>JPEG works best (original quality and EXIF kept). PNG/WebP also work.</span>
+  </div>
+  <input id="file-input" type="file" accept="image/jpeg,image/png,image/webp,image/avif,image/heic,.jpg,.jpeg" multiple hidden>
+
+  <section class="card">
+    <div class="row">
+      <label for="boost">Highlight boost <output id="boost-out"></output></label>
+      <input id="boost" type="range" min="1" max="3" step="0.25" value="2">
+      <small>How much brighter the brightest parts can get on an HDR screen.</small>
+    </div>
+    <div class="row">
+      <label for="threshold">Boost starts at <output id="threshold-out"></output></label>
+      <input id="threshold" type="range" min="0" max="80" step="1" value="13">
+      <small>Everything darker than this stays exactly as it is.</small>
+    </div>
+    <div class="row">
+      <label for="spread">Spread into mids <output id="spread-out"></output></label>
+      <input id="spread" type="range" min="0" max="100" step="1" value="60">
+      <small>Low = only the brightest parts pop. High = the lift rolls smoothly down through the midtones.</small>
+    </div>
+    <div class="row">
+      <label for="saturation">HDR saturation <output id="saturation-out"></output></label>
+      <input id="saturation" type="range" min="0" max="60" step="5" value="15">
+      <small>Extra colour in brightened areas on HDR screens, like iPhone/Pixel HDR photos. SDR screens still show your original. 0 = off.</small>
+    </div>
+    <figure class="curve">
+      <svg id="curve" viewBox="0 0 300 120" preserveAspectRatio="none" role="img" aria-label="Boost curve"></svg>
+      <figcaption><span>Shadows</span><span>Mids</span><span>Highlights</span></figcaption>
+    </figure>
+    <label class="check"><input id="reprocess" type="checkbox"> Replace the gain map on photos that are already HDR</label>
+    <details class="advanced">
+      <summary>Advanced</summary>
+      <div class="row">
+        <label for="format">Metadata format</label>
+        <select id="format">
+          <option value="xmp" selected>Google/Adobe Ultra HDR (works on Android + iPhone)</option>
+          <option value="both">Google + ISO 21496-1, experimental (adds _both to name)</option>
+          <option value="iso">ISO 21496-1 only, experimental (adds _iso to name)</option>
+        </select>
+        <small>The ISO variants currently don't show as HDR on iPhone. Kept for testing.</small>
+      </div>
+    </details>
+  </section>
+
+  <div class="results">
+    <p id="hdr-note"></p>
+    <div class="actions">
+      <button id="convert" class="btn primary">Convert all</button>
+      <button id="zip" class="btn">Download all (.zip)</button>
+      <button id="share" class="btn" hidden>Save / Share…</button>
+      <button id="clear" class="btn">Clear</button>
+    </div>
+    <div id="summary" aria-live="polite"></div>
+    <ul id="list"></ul>
+  </div>
+
+  <footer>
+    <p>Output: JPEG + gain map (Google Ultra HDR / Adobe gain map format). Older viewers just show the normal photo.</p>
+    <p>Version 9 · The HDR is synthesized from the highlights. It's an effect, like Lightroom's HDR on non-RAW files, not recovered detail.</p>
+  </footer>
+</main>
+<script type="module" src="js/app.js?v=9"></script>
+</body>
+</html>
